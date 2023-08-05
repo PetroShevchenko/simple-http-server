@@ -1,0 +1,3 @@
+[submodule "third-party/tslogger"]
+	path = third-party/tslogger
+	url = https://github.com/PetroShevchenko/tslogger.git
