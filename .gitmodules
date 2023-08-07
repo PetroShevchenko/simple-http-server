@@ -1,3 +1,6 @@
 [submodule "third-party/tslogger"]
 	path = third-party/tslogger
 	url = https://github.com/PetroShevchenko/tslogger.git
+[submodule "third-party/zlib"]
+	path = third-party/zlib
+	url = https://github.com/madler/zlib.git

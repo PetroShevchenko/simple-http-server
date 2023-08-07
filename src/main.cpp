@@ -14,8 +14,8 @@ static HttpServer *serverPtr = nullptr;
 
 static void stop_server(void *obj)
 {
-	if (obj)
-		((HttpServer *)obj)->stop();
+    if (obj)
+        ((HttpServer *)obj)->stop();
 }
 
 static void signal_handler(int signo)
@@ -24,8 +24,8 @@ static void signal_handler(int signo)
     {
         cerr << "There was cought SIGINT\n";
         if (serverPtr == nullptr)
-        	exit(0);
-    	stop_server(serverPtr);
+            exit(0);
+        stop_server(serverPtr);
     }
 }
 
@@ -48,50 +48,63 @@ int main()
         exit(1);
     }
 
-	std::jthread handlerThread([&](){
-		while(true) {
-			logHandler.process();
-		}
-	});
+    std::jthread handlerThread([&](){
+        while(true) {
+            logHandler.process();
+        }
+    });
     handlerThread.detach();
 
-	Logger logger(
+    Logger logger(
         logHandler.get_queue_ptr(),
         logFileName,
         FLAGS_OUTPUT_TO_ALL
-	);
+    );
 
-	HttpServer server(
-					"/var/www/embedded.net.ua",
-					8080,
-					true,
-					10,
-					logHandler,
-					logFileName,
-					true,
-					ec
-				);
-	if (ec.value()) {
-		logger.log(ERROR, ec.message().c_str());
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		exit(1);
-	}
+    HttpServer server(
+                    "/var/www/embedded.net.ua",
+                    8080,
+                    true,
+                    10,
+                    logHandler,
+                    logFileName,
+                    true,
+                    ec
+                );
+    if (ec.value()) {
+        logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, ec.message().c_str());
+        exit(1);
+    }
 
-	serverPtr = &server;
+    serverPtr = &server;
 
-	while (server.is_running())
-	{
-		Connection conn;
-		logger << "Main thread, run accept()\n";
-		ec.clear();
-		server.accept(conn, ec);
-		if (ec.value()) {
-			logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, ec.message().c_str());
-			continue;
-		}
-		server.new_thread(std::move(conn));
-	}
+    // this is a thread to join all client threads with closed connections
+    std::jthread removerThread([&](){
+        std::error_code ec;
+        while(true) {
+            server.thread_remover(ec);
+            if (ec.value()) {
+                logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, ec.message().c_str());
+                ec.clear();
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+    });
+    removerThread.detach();
 
-	logger << "Program terminated\n";
-	exit(0);
+    while (server.is_running())
+    {
+        Connection conn;
+        logger << "Main thread, run accept()\n";
+        ec.clear();
+        server.accept(conn, ec);
+        if (ec.value()) {
+            logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, ec.message().c_str());
+            continue;
+        }
+        server.new_thread(std::move(conn));
+    }
+
+    logger << "Program terminated\n";
+    exit(0);
 }
