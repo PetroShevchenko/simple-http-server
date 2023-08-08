@@ -17,6 +17,7 @@ enum class HttpStatus
     HTTP_ERR_FILE_NOT_FOUND,
     HTTP_ERR_FORBIDDEN,
     HTTP_ERR_TIMEOUT,
+    HTTP_ERR_INTERNAL_SERVER_ERROR,
 };
 
 namespace std

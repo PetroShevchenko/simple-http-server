@@ -1,4 +1,5 @@
 #include "http_server.hpp"
+#include "utils.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -13,10 +14,10 @@ const char *CONTENT_SEPARATOR = "\r\n\r\n";
 
 const char *RESPONSE_HEADER_TEMPLATE = "HTTP/1.1 %s\r\n"\
 "Server: simple-http-server\r\n"\
-"Content-Length: %d\r\n"\
+"Content-Encoding: %s\r\n"\
+"Content-Length: %08d\r\n"\
 "Content-Type: %s\r\n"\
 "\r\n";
-
 
 const char *ERROR_PAGE_TEMPLATE = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"\
 "<html>"\
@@ -203,6 +204,12 @@ void RequestHandler::parse_incomming_http_pdu()
 	m_logger.log(DEBUG, "%s:%d >>> Exiting\n", __FILE__, __LINE__);
 }
 
+static void create_header(std::filesystem::path &filePath, size_t contentSize, char (&out)[256])
+{
+    const char *ct = content_type2str( file_extention2content_type( filePath.extension().string().c_str() ) );
+    sprintf(out, RESPONSE_HEADER_TEMPLATE, "200 OK", "deflate", contentSize, ct);
+}
+
 void RequestHandler::handle_get_request()
 {
 	m_logger.log(DEBUG, "%s:%d <<< Entering\n", __FILE__, __LINE__);
@@ -222,35 +229,29 @@ void RequestHandler::handle_get_request()
 		m_logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, m_ec.message().c_str());
 		return;
     }
-
-	std::ifstream ifs(filePath);
-	if (!ifs.is_open()) {
-		m_ec = make_error_code(HttpStatus::HTTP_ERR_FILE_NOT_FOUND);
-		m_logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, m_ec.message().c_str());
-		return;		
-	}
-
-    ifs.seekg(0, std::ios::end);
-    size_t contentSize = ifs.tellg();
-    ifs.seekg(0);
-
-    const char *ct = content_type2str( file_extention2content_type( filePath.extension().string().c_str() ) );
+    // content size is required here only to calculate a header size
+	size_t contentSize = MAX_BUFFER_SIZE;
     char header[256];
-    sprintf(header, RESPONSE_HEADER_TEMPLATE, "200 OK", contentSize, ct);
+    create_header(filePath, contentSize, header);
 
-    if (strlen(header) + contentSize > MAX_BUFFER_SIZE) {
-		m_ec = make_error_code(HttpStatus::HTTP_ERR_BAD_REQUEST);
-		m_logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, m_ec.message().c_str());
-		ifs.close();
-		return;
-    }
+	m_buffer.clear();
+	// copy the header to the output buffer
     strncpy(m_buffer.data(), header, strlen(header));
 	m_offset = strlen(header);
+	m_buffer.offset(m_offset);
+	// compress the requested file
+	contentSize = compress_file(filePath, m_logger, m_buffer, m_ec);
+	if (m_ec.value()) {
+		m_logger.log(ERROR, "%s:%d %s\n", __FILE__, __LINE__, m_ec.message().c_str());
+		return;
+	}
 
-    ifs.read(m_buffer.data() + m_offset, contentSize);
-    ifs.close();
+	// create header again due to the Content-Lenght has been changed
+	create_header(filePath, contentSize, header);
+	strncpy(m_buffer.data(), header, strlen(header));
+	m_offset = strlen(header);
+
 	m_offset += contentSize;
-
 	m_logger.log(DEBUG, "%s:%d >>> Exiting\n", __FILE__, __LINE__);
 }
 
@@ -259,7 +260,7 @@ static void create_error_content(std::error_code &ec, std::string &out)
 	char header[256];
 	char html[256];
 	sprintf(html, ERROR_PAGE_TEMPLATE, ec.message().c_str(), ec.message().c_str(), ec.message().c_str());
-	sprintf(header, RESPONSE_HEADER_TEMPLATE, ec.message().c_str(), strlen(html), "text/html");
+	sprintf(header, RESPONSE_HEADER_TEMPLATE, ec.message().c_str(), "deflate", strlen(html), "text/html");
 	out = header;
 	out += html;
 }

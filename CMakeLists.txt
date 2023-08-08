@@ -23,6 +23,16 @@ include_directories(${TSLOGGER_PATH}/api)
 add_subdirectory(${TSLOGGER_PATH})
 
 #############################################################
+# zlib library
+#############################################################
+
+set(ZLIB_PATH ${CMAKE_CURRENT_LIST_DIR}/third-party/zlib)
+
+include_directories(${ZLIB_PATH})
+
+add_subdirectory(${ZLIB_PATH})
+
+#############################################################
 # simple-http-server application
 #############################################################
 
@@ -48,11 +58,13 @@ add_executable(${PROJECT_NAME} ${SRC_LIST})
 target_link_libraries(
 	${PROJECT_NAME}
 		tslogger
+		zlib
 )
 
 target_link_directories(
 	${PROJECT_NAME} PRIVATE
 		${LIB_DIR}/tslogger
+		${LIB_DIR}/zlib
 )
 
 target_include_directories(

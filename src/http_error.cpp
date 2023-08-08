@@ -43,6 +43,8 @@ std::string HttpErrorCategory::message(int ev) const
             return "403 Forbidden";
         case HttpStatus::HTTP_ERR_TIMEOUT:
             return "Timeout expired";
+        case HttpStatus::HTTP_ERR_INTERNAL_SERVER_ERROR:
+            return "500 Internal Server Error";
     }
     return "Unknown error";
 }
